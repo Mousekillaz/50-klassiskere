@@ -921,7 +921,7 @@
         if (isRead) read++;
         if (hideRead && isRead) return;
         shown++;
-        items += '<label class="book' + (isRead ? " is-read" : "") + '" data-id="' + b.id + '">' +
+        items += '<div class="book' + (isRead ? " is-read" : "") + '" data-id="' + b.id + '">' +
           '<span class="num">NR. ' + (i + 1) + '</span>' +
           coverHTML(b, i) +
           '<span class="meta">' +
@@ -933,7 +933,7 @@
           '</span>' +
           '<input class="tick" type="checkbox"' + (isRead ? " checked" : "") +
             ' aria-label="Markér ' + esc(b.t) + ' som læst">' +
-        '</label>';
+        '</div>';
       });
       if (!items) return;
       html += '<section class="era" data-era="' + era.id + '">' +
@@ -953,20 +953,36 @@
   var target = 0;
   var raf = null;
 
+  var OMBORD = 0.96;   // de sidste to bøger haler fisken over rælingen
+
   function paint(p){
-    var x = 90 + p * 645;
-    var y = 182 - p * 58;
-    var rot = -2 - p * 22;
+    var x, y, rot, sc, q = 0;
+    if (p < OMBORD){
+      var k = p / OMBORD;
+      x = 90 + k * 620;
+      y = 182 - k * 54;
+      rot = -2 - k * 22;
+      sc = 1;
+    } else {
+      q = (p - OMBORD) / (1 - OMBORD);
+      var e = q * q;                 // det meste af turen ombord sker på den sidste bog
+      x = 710 + e * 68;
+      y = 128 + e * 6;
+      rot = -24 + e * 15;
+      sc = 1 - e * 0.38;
+    }
     fishEl.setAttribute("transform", "translate(" + x.toFixed(1) + "," + y.toFixed(1) +
-      ") rotate(" + rot.toFixed(1) + ")");
-    // bill tip in scene coords, after rotation
+      ") rotate(" + rot.toFixed(1) + ") scale(" + sc.toFixed(3) + ")");
+
+    // linen slækkes og forsvinder, efterhånden som fisken kommer ind over rælingen
     var rad = rot * Math.PI / 180;
-    var bx = x + 104 * Math.cos(rad), by = y + 104 * Math.sin(rad);
+    var bx = x + 104 * sc * Math.cos(rad), by = y + 104 * sc * Math.sin(rad);
     var rodX = 732, rodY = 52;
     var sag = 46 * (1 - p) + 10;
     var cx = (rodX + bx) / 2, cy = (rodY + by) / 2 + sag;
     lineEl.setAttribute("d", "M" + rodX + "," + rodY + " Q" + cx.toFixed(1) + "," +
       cy.toFixed(1) + " " + bx.toFixed(1) + "," + by.toFixed(1));
+    lineEl.setAttribute("opacity", (0.85 * (1 - q * q)).toFixed(2));
   }
 
   function animate(){
@@ -983,11 +999,18 @@
     })(t0);
   }
 
+  // Sidste replik er forbeholdt den halvtredsindstyvende bog.
+  function quipFor(n){
+    if (n >= BOOKS.length) return QUIPS[QUIPS.length - 1];
+    var i = Math.floor((n / BOOKS.length) * (QUIPS.length - 1));
+    return QUIPS[Math.min(QUIPS.length - 2, i)];
+  }
+
   function renderScene(){
     var n = keys().length;
     target = n / BOOKS.length;
     doneEl.textContent = n;
-    quipEl.textContent = QUIPS[Math.min(QUIPS.length - 1, Math.round(target * (QUIPS.length - 1)))];
+    quipEl.textContent = quipFor(n);
     animate();
   }
 
@@ -1291,11 +1314,20 @@
   });
 
   listEl.addEventListener("click", function(ev){
-    var btn = ev.target.closest ? ev.target.closest(".more") : null;
-    if (!btn) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    openSheet(btn.getAttribute("data-more"));
+    if (!ev.target.closest) return;
+    var btn = ev.target.closest(".more");
+    if (btn){
+      ev.preventDefault();
+      openSheet(btn.getAttribute("data-more"));
+      return;
+    }
+    if (ev.target.closest(".tick")) return;   // feltet klarer sig selv
+    var row = ev.target.closest(".book");
+    if (!row) return;
+    var box = row.querySelector(".tick");
+    if (!box) return;
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event("change", {bubbles: true}));
   });
 
   // --- events ------------------------------------------------------------
